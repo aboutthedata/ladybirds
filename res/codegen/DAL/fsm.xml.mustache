@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<fsm xmlns="http://www.tik.ee.ethz.ch/~euretile/schema/FSM"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    name="fsm_«appname»"
+    xsi:schemaLocation="http://www.tik.ee.ethz.ch/~euretile/schema/FSM
+        http://www.tik.ee.ethz.ch/~euretile/schema/fsm.xsd">
+
+    <application name="APP1" src="app1/pn.xml" critical="0" />
+
+    <transition name="trans_1" nextstate="State_1" />
+
+    <state name="State_1">
+        <transition name="trans_2" nextstate="END_STATE">
+            <event name="stop_state1" />
+        </transition>
+        <run application="APP1" />
+    </state>
+
+    <state name="END_STATE" />
+
+    <endstate name="END_STATE"></endstate>
+</fsm>

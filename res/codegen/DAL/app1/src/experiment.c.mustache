@@ -1,0 +1,41 @@
+#include <stdio.h>
+#include <stdlib.h>
+#include <time.h>
+#include <unistd.h>
+#include <dal.h>
+
+#include "experiment.h"
+#include "_Process1.h"
+
+DALProcess *gExperimentProcessHandle = 0;
+struct timespec gExperimentStartTime;
+
+void StartExperiment()
+{
+    sleep(2); //Wait such that all other processes have time to prepare optimally
+    printf("Starting experiment!\n");
+    
+    if(clock_gettime(CLOCK_REALTIME, &gExperimentStartTime) != 0)
+    {
+        perror("Error: Couldn't obtain start time.");
+        exit(1);
+    }
+}
+
+
+void StopExperiment()
+{
+    struct timespec stoptime;
+    
+    if(clock_gettime(CLOCK_REALTIME, &stoptime) != 0)
+    {
+        perror("Error: Couldn't obtain stop time.");
+        exit(1);
+    }
+    
+    float timediff = (stoptime.tv_sec-gExperimentStartTime.tv_sec) 
+                    + 1e-9*(stoptime.tv_nsec - gExperimentStartTime.tv_nsec);
+    printf("Experiment finished. %g seconds.\n", timediff);
+    
+    DAL_send_event((void *)EVENT_DONE, gExperimentProcessHandle);
+}

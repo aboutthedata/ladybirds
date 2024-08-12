@@ -1,0 +1,64 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<processnetwork
+    xmlns="http://www.tik.ee.ethz.ch/~euretile/schema/PROCESSNETWORK"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xsi:schemaLocation="http://www.tik.ee.ethz.ch/~euretile/schema/PROCESSNETWORK
+        http://www.tik.ee.ethz.ch/~euretile/schema/processnetwork.xsd"
+    name="APP1" id="0">
+
+
+<!--______
+    | ___ \
+    | |_/ / __ ___   ___ ___  ___ ___  ___  ___
+    |  __/ '__/ _ \ / __/ _ \/ __/ __|/ _ \/ __|
+    | |  | | | (_) | (_|  __/\__ \__ \  __/\__ \
+    \_|  |_|  \___/ \___\___||___/___/\___||___/
+-->
+
+    «#groups»
+        <process name="«name»" type="io">
+        «#inputs»
+            <port type="input" name="«name»"/>
+        «/inputs»
+        «#outputs»
+            <port type="output" name="«name»"/>
+        «/outputs»
+            <source type="c" location="«name».c" />
+    </process>
+    «/groups»
+
+<!-- _____ _                                                  _____                             _   _
+    /  __ \ |                          | |           _       /  __ \                           | | (_)
+    | /  \/ |__   __ _ _ __  _ __   ___| |___      _| |_     | /  \/ ___  _ __  _ __   ___  ___| |_ _  ___  _ __  ___
+    | |   | '_ \ / _` | '_ \| '_ \ / _ \ / __|    |_   _|    | |    / _ \| '_ \| '_ \ / _ \/ __| __| |/ _ \| '_ \/ __|
+    | \__/\ | | | (_| | | | | | | |  __/ \__ \      |_|      | \__/\ (_) | | | | | | |  __/ (__| |_| | (_) | | | \__ \
+     \____/_| |_|\__,_|_| |_|_| |_|\___|_|___/                \____/\___/|_| |_|_| |_|\___|\___|\__|_|\___/|_| |_|___/
+-->
+
+    «#channels»
+    <sw_channel type="fifo" size="8" name="«name»">
+        <port type="input" name="in" />
+        <port type="output" name="out" />
+    </sw_channel>
+    <connection name="«name»_in">
+        <origin name="«from.iface.task.group.name»">
+            <port name="«from.name»" />
+        </origin>
+        <target name="«name»">
+            <port name="in" />
+        </target>
+    </connection>
+    <connection name="«name»_out">
+        <origin name="«name»">
+            <port name="out" />
+        </origin>
+        <target name="«to.iface.task.group.name»">
+            <port name="«to.name»" />
+        </target>
+    </connection>
+    
+    «/channels»
+
+
+</processnetwork>

@@ -1,0 +1,34 @@
+#include <stdio.h>
+#include <stdlib.h>
+#include <unistd.h>
+#include <sys/time.h>
+
+#include "experiment.h"
+struct timeval gExperimentStartTime;
+
+void StartExperiment()
+{
+    printf("Starting experiment!\n");
+    
+    if(gettimeofday(&gExperimentStartTime, 0) != 0)
+    {
+        perror("Error: Couldn't obtain start time.");
+        exit(1);
+    }
+}
+
+
+void StopExperiment()
+{
+    struct timeval stoptime;
+    
+    if(gettimeofday(&stoptime, 0) != 0)
+    {
+        perror("Error: Couldn't obtain stop time.");
+        exit(1);
+    }
+    
+    long timediff = 1000000L*(stoptime.tv_sec-gExperimentStartTime.tv_sec) 
+    + (stoptime.tv_usec - gExperimentStartTime.tv_usec);
+    printf("Experiment finished. %ld µs.\n", timediff);
+}

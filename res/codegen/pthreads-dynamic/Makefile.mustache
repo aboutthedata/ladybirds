@@ -1,0 +1,22 @@
+SHELL=/bin/bash
+CC=gcc
+LD=gcc
+
+CFLAGS=-O3 -std=c11 -Wall
+LDFLAGS=-lm -pthread
+
+OFILES=«#ofiles»«.» «/ofiles»$(shell echo _Thread{1..«threadcount»}.o)
+
+CFLAGS += -Ilb-includes
+
+
+all: «appname»
+
+«appname»: $(OFILES)
+	$(LD) $(LDFLAGS) $^ -o $@
+
+%.o: %.c global.h
+	$(CC) $(CFLAGS) -c $< -o $@
+
+clean:
+	rm -f «appname» $(OFILES)

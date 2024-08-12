@@ -1,0 +1,31 @@
+#include <stdio.h>
+#include <stdlib.h>
+#include <unistd.h>
+#include <dal.h>
+
+#include <chrono>
+
+#include "experiment.h"
+#include "_Process1.h"
+
+DALProcess *gExperimentProcessHandle = 0;
+std::chrono::time_point<std::chrono::system_clock> gExperimentStartTime;
+
+void StartExperiment()
+{
+    usleep(100000); //Wait such that all other processes have time to prepare optimally
+    printf("Starting experiment!\n");
+    
+    gExperimentStartTime = std::chrono::system_clock::now();
+}
+
+
+void StopExperiment()
+{
+    auto stoptime = std::chrono::system_clock::now();
+    auto timediff = stoptime - gExperimentStartTime;
+    
+    printf("Experiment finished. %d µs.\n", timediff/std::chrono::microseconds(1));
+    
+    DAL_send_event((void *)EVENT_DONE, gExperimentProcessHandle);
+}

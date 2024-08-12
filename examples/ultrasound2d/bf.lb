@@ -1,0 +1,520 @@
+// Copyright ETH Zurich, 2022. This code is under the Apache License v2.0 with LLVM Exceptions. See LICENSE.TXT.
+
+#include <float.h>
+#include <inttypes.h>
+#include <math.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+// #include "lodepng.h"
+#include <ladybirds.h>
+
+#include "constants.h"
+
+#define MEGA (1e6)
+#define USFreq (7.5e6)
+#define AttenuationCoeff ((MEGA)/(USFreq))
+
+
+#define SCALAR(x) x[2]
+
+//----------------------------------------------------DEFINITIONS-------------------------------------------------------
+enum
+{
+    TRANSDUCERS          = 63,
+    DISTTABLEWIDTH       = 2*TRANSDUCERS - 1,//TODO: Shrink this!
+
+    TIMESTEPS            = 5000,//TODO: Shrink this!
+    IN_LINE_LENGTH       = 1638,
+    OUT_LINE_LENGTH      = 1548,
+    N_OFFSET             = 1210,
+    DBGOUT_D1            = TRANSDUCERS,
+    DBGOUT_D2            = OUT_LINE_LENGTH,
+
+
+    HPLP_ORDER           = 19,
+    HPLP_SIZE            = HPLP_ORDER+1,
+    HILB_ORDER           = 64,
+    HILB_SIZE            = 2*HILB_ORDER+1,
+};
+
+
+kernel(Apodize) (in float ApodVector[TIMESTEPS], in float DataIn[OUT_LINE_LENGTH],
+                 out float DataOut[OUT_LINE_LENGTH] buddy(DataIn))
+{
+    for(int i=0; i<OUT_LINE_LENGTH; i++)
+    {
+        DataOut[i] = DataIn[i] * ApodVector[i + N_OFFSET];
+    }
+}
+
+
+void Hanning(int N, /*out*/ float *w)
+{
+    int half = (N+1)/2;
+    for(int i=0; i < half; i++)
+        /* Equation of a raised cosine for the Hanning function */
+    {
+        w[i] = 0.5 * (1 - cosf(2*M_PI*(i+1)/(N+1)));
+        w[N-i-1] = w[i];
+    }
+}
+
+float GetMaxApodAngle()
+{
+    float apodAngle = 0.0;
+    for (int i = 1; i < 120; ++i)
+    {
+        apodAngle += 0.01;
+        float x = (USFREQ/SOUND_SPEED)*(PITCH)*sinf(apodAngle);
+        float directivity = (sin(M_PI*x)/(M_PI*x))*cosf(apodAngle);
+        /* Check for directivity greater than 70% */
+        if (directivity < 0.7) break;
+    }
+
+    return apodAngle - 0.01;
+}
+
+
+kernel(GenerateApod) (out int MaxElements[TIMESTEPS], out float ApodTable[DISTTABLEWIDTH][TIMESTEPS])
+{
+    memset(ApodTable, 0, DISTTABLEWIDTH*sizeof(*ApodTable));
+    memset(MaxElements, 0, TIMESTEPS*sizeof(*MaxElements));
+
+    float tangent = tanf(GetMaxApodAngle());
+
+    for (int i=0; i<TIMESTEPS; i++)
+    {
+        float z = 0.5*SOUND_SPEED*i*(TIMESTEP); /* [m] */ /*The divide by 2 factor stems from the fact that we consider one-way distance*/
+        float han_halfwidth = z*tangent;  /* [m] Hanning width at depth i */
+        int han_halfwidth_n = (int) roundf((han_halfwidth)/(PITCH)); /* The Hanning width in element number at depth i*/
+
+        /* Choose the minimum value among no. of transducers and the Hanning width in element number*/
+        MaxElements[i] = min(han_halfwidth_n, TRANSDUCERS - 1);
+
+        int hansize = 2*han_halfwidth_n + 1;
+        float han[hansize];
+        Hanning(hansize, han); //HACK
+
+        /* Generate the apodization vector using Hanning window */
+        for (int k = TRANSDUCERS-MaxElements[i], j = han_halfwidth_n+1-MaxElements[i];
+                k < TRANSDUCERS+MaxElements[i];
+                k++, j++)
+        {
+            ApodTable[k][i] = han[j];
+        }
+    }
+}
+
+
+kernel(GenerateAtten) (out float AttenuationVector[TIMESTEPS])
+{
+    float attenuation = powf(10, ATTENUATION_DB*0.05); /* [-/cm] */   /* x0.05 is divided by 20, to convert from dB to number */
+    float distance_step =  SOUND_SPEED*(TIMESTEP)*1e2; /* [cm] */
+    float attenuation_ts =  powf(attenuation,distance_step);
+
+    AttenuationVector[0] = attenuation_ts;
+
+    for (int i=1; i<TIMESTEPS; i++)
+        AttenuationVector[i] = AttenuationVector[i-1]*attenuation_ts;
+}
+
+
+kernel(GenerateDelay) (in int MaxElements[TIMESTEPS], out int DelayVector[DISTTABLEWIDTH][TIMESTEPS])
+{
+    memset(DelayVector,0,DISTTABLEWIDTH*sizeof(*DelayVector)); //HACK
+
+    float t_Rx[DISTTABLEWIDTH];
+
+    for(int i=0; i<TIMESTEPS; i++)
+    {
+        /* t_Tx is the time of the one-way (Tx) flight at the ith time-sample in [s]*/
+        float t_Tx = i*TIMESTEP*0.5;
+
+
+        /* t_Rx is the time of the (Rx) flight at the ith time-sample in [s]*/
+        int n = MaxElements[i];
+
+        for(int j=-n; j<1; j++)
+        {
+            t_Rx[j+n] = sqrt(t_Tx*t_Tx + (j*(PITCH)/SOUND_SPEED)*(j*(PITCH)/SOUND_SPEED));
+            t_Rx[n-j] = t_Rx[j+n];
+        }
+
+        for(int j=TRANSDUCERS-n-1, k=0;
+            j < TRANSDUCERS+n;
+            j++,k++)
+        {
+            DelayVector[j][i] = (int) roundf((t_Tx + t_Rx[k]) / TIMESTEP);
+        }
+    }
+}
+
+
+kernel(GenerateLP) (out float FilterOut[HPLP_SIZE])
+{
+    static const float Wn = 0.15;
+
+    int Pr_L = HPLP_ORDER, N = HPLP_ORDER;
+    int odd=0, nhlf=0;
+    float f1=0, gain=0, c1=0;
+    float wind[Pr_L],xn[Pr_L/2],b[Pr_L/2],c[Pr_L/2],c3[Pr_L/2];
+
+    //HACK
+    memset(&wind[0],0,Pr_L*sizeof(float));
+    memset(&xn[0],0,(Pr_L/2)*sizeof(float));
+    memset(&b[0],0,(Pr_L/2)*sizeof(float));
+    memset(&c[0],0,(Pr_L/2)*sizeof(float));
+    memset(&c3[0],0,(Pr_L/2)*sizeof(float));
+
+    gain = 0.0000000;
+    N = N+1;
+    odd = N & 1; /* odd = rem(N,2) */
+
+    /*wind = hamming(N);*/
+    for (int i=0; i < Pr_L/2; i++)
+    {
+        wind[i] = 0.54 - 0.46 * cosf((2 * M_PI * i) / (N-1));
+        wind[Pr_L - 1 - i] = wind[i];
+    }
+
+    f1 = Wn / 2.0;
+    c1 = f1;
+    nhlf = (N+1) / 2;
+
+
+    /* Lowpass */
+
+    if(odd)
+        b[0] = 2 * c1;
+
+    for (int i=0; i < nhlf; i++)
+    {
+        xn[i] = i + 0.5 * (1 - odd);
+        c[i] = M_PI * xn[i];
+        c3[i] = 2 * c1 * c[i];
+        /* b(i1:nhlf)=(sin(c3)./c) */
+        b[i] = sinf(c3[i]) / c[i];
+    }
+
+    /* FilterOut = real([b(nhlf:-1:i1) b(1:nhlf)].*wind(:)') */
+    for (int i=0,j=nhlf-1; i < nhlf; i++, j--)
+    {
+        FilterOut[i] = b[j];
+    }
+    for (int i=nhlf,j=0; i < Pr_L; i++,j++)
+    {
+        FilterOut[i] = b[j];
+    }
+    for (int i=0; i < Pr_L; i++)
+    {
+        FilterOut[i] *= wind[i];
+        /* gain = abs(polyval(b,1)); */
+        gain += FilterOut[i];
+    }
+
+    /* b = b / gain */
+    for (int i=0; i < Pr_L; i++)
+    {
+        FilterOut[i] /= gain;
+    }
+}
+
+kernel(LPtoHP) (inout float FilterOut[HPLP_SIZE])
+{
+    for(int i=0; i < HPLP_SIZE; i++)
+    {
+        FilterOut[i] = -FilterOut[i];
+    }
+    FilterOut[(HPLP_SIZE)/2] += 1;
+}
+
+metakernel(GenerateHP) (out float FilterOut[HPLP_SIZE])
+{
+    GenerateLP(FilterOut);
+    LPtoHP(FilterOut);
+}
+
+kernel(GenerateHilbertFilter) (out float FilterOut[HILB_SIZE])
+{
+    for(int i = -HILB_ORDER; i <= HILB_ORDER; i++)
+    {
+        if(i%2 != 0)
+            FilterOut[i + HILB_ORDER] = (float) 2/(i*M_PI);
+        else FilterOut[i] = 0;
+    }
+}
+
+
+
+kernel(GetImage) (out float Img[TRANSDUCERS][IN_LINE_LENGTH])
+{
+    FILE *fp = fopen("r1wire+gum.bin","rb");
+    if (!fp)
+    {
+        fprintf(stderr, "Unable to open file!\n");
+        exit(1);
+    }
+
+    if(fread(Img, sizeof(*Img), TRANSDUCERS, fp) != TRANSDUCERS) //HACK
+    {
+        perror("Unexpected error reading RF data");
+        exit(1);
+    }
+
+    if(fgetc(fp) != EOF)
+    {
+        long l = ftell(fp);
+        fseek(fp, 0, SEEK_END);
+        l = ftell(fp) - l;
+        fprintf(stderr, "Warning: %ld additional bytes available!\n", l);
+    }
+
+    fclose(fp);
+}
+
+
+kernel(GetIndex) (in int DelayVector[TIMESTEPS], in float DataIn[IN_LINE_LENGTH], out float DataOut[OUT_LINE_LENGTH] buddy(DataIn))
+{
+    for (int i=0; i<OUT_LINE_LENGTH; i++)
+    {
+        int index_img = DelayVector[i + N_OFFSET] - N_OFFSET;
+        DataOut[i] = DataIn[index_img];
+    }
+}
+
+
+
+kernel(HP) (in float Kernel[HPLP_SIZE], in float DataIn[IN_LINE_LENGTH], out float DataOut[IN_LINE_LENGTH])
+{
+    for (int n = HPLP_ORDER/2; n < IN_LINE_LENGTH + HPLP_ORDER/2; n++)
+    {
+        int kmin = (n >= HPLP_ORDER) ? n - HPLP_ORDER : 0;
+        int kmax = (n < IN_LINE_LENGTH - 1) ? n : IN_LINE_LENGTH - 1;
+
+        float sum = 0;
+        for (int k = kmin; k <= kmax; k++)
+        {
+            sum += DataIn[k] * Kernel[n - 1 - k];
+        }
+        DataOut[n - HPLP_ORDER/2] = sum;
+    }
+}
+
+
+kernel(Hilbert) (in float Kernel[HILB_SIZE], in float DataIn[OUT_LINE_LENGTH],
+                 out float DataOut[OUT_LINE_LENGTH])
+{
+    for(int n = 0; n < OUT_LINE_LENGTH; n++)
+    {
+        int start = n - HILB_ORDER + 1;
+
+        const float * kernel_begin = Kernel+1;
+        const float * data_begin = DataIn + start; //HACK!
+        const float * data_end = DataIn + n + HILB_ORDER;
+
+        if(data_begin < DataIn)
+        {
+            data_begin = DataIn;
+            kernel_begin -= start;
+            if(start & 1)
+            {
+                data_begin++;
+                kernel_begin++;
+            }
+        }
+        if(data_end > DataIn+OUT_LINE_LENGTH) data_end = DataIn+OUT_LINE_LENGTH;
+
+        float sum = 0;
+        //Start with odd number
+        for(const float * pf = data_begin; pf < data_end; pf+=2, kernel_begin+=2) //HACK!
+        {
+            sum += *pf * *kernel_begin;
+        }
+        DataOut[n] = sum*sum + DataIn[n]*DataIn[n]; //sqrt is not needed since we take the logarithm afterwards
+    }
+}
+
+
+kernel(IQDemod) (in float Kernel[HILB_SIZE], in float DataIn[OUT_LINE_LENGTH], out float DataOut[OUT_LINE_LENGTH])
+{
+    for (int n = 0; n < OUT_LINE_LENGTH; n++)
+    {
+        int start = n - HILB_ORDER + 1;
+
+        const float * kernel_begin = Kernel+1; //HACK!
+        const float * data_begin = DataIn + start;
+        const float * data_end = DataIn + n + HILB_ORDER;
+
+        if(data_begin < DataIn)
+        {
+            data_begin = DataIn;
+            kernel_begin -= start;
+            if(start & 1)
+            {
+                data_begin++;
+                kernel_begin++;
+            }
+        }
+        if(data_end > DataIn+OUT_LINE_LENGTH) data_end = DataIn+OUT_LINE_LENGTH;
+
+        float sum = 0;
+        //Start with odd number
+        for(const float * pf = data_begin; pf < data_end; pf+=2, kernel_begin+=2) //HACK
+        {
+            sum += *pf * *kernel_begin;
+        }
+        DataOut[n] = sum;
+    }
+}
+
+
+
+kernel(LP) (in float Kernel[HPLP_SIZE], in float DataIn[OUT_LINE_LENGTH], out float DataOut[OUT_LINE_LENGTH])
+{
+    for (int n = HPLP_ORDER/2; n < OUT_LINE_LENGTH + HPLP_ORDER/2; n++)
+    {
+        int kmin = (n >= HPLP_ORDER) ? n - HPLP_ORDER : 0;
+        int kmax = (n < OUT_LINE_LENGTH - 1) ? n : OUT_LINE_LENGTH - 1;
+
+        float sum = 0;
+        for (int k = kmin; k <= kmax; k++)
+        {
+            sum += DataIn[k] * Kernel[n - 1 - k];
+        }
+        DataOut[n - HPLP_ORDER/2] = sum;
+    }
+}
+
+kernel(Log) (in float DataIn[OUT_LINE_LENGTH], out uint8_t DataOut[OUT_LINE_LENGTH] buddy(DataIn))
+{
+    static const float GSValue = 255.0, Im_max = 1e7, Im_min = 1e5;
+
+    //float curmax = 0;
+    //for (int i=0; i<OUT_LINE_LENGTH; i++) curmax = max(curmax, DataIn[i]);
+    float l2max = log2f(Im_max), l2min = log2f(Im_min);
+    float mul = GSValue/(l2max-l2min);
+
+    for (int i=0; i<OUT_LINE_LENGTH; i++)
+    {
+        float f = (log2f(DataIn[i]) - l2min) * mul;
+        if(f < 0) DataOut[i] = 0;
+        else if(f > GSValue) DataOut[i] = GSValue;
+        else DataOut[i] = roundf(f);
+    }
+}
+
+
+
+kernel(Sink) (in uint8_t Img[TRANSDUCERS][OUT_LINE_LENGTH])
+{
+    // lodepng_encode_file("out.png", (uint8_t*) Img, OUT_LINE_LENGTH, TRANSDUCERS, LCT_GREY, 8); //HACK!
+}
+
+kernel(DebugOut) (in float Image[DBGOUT_D1][DBGOUT_D2])
+{
+    const int npixels = DBGOUT_D1*DBGOUT_D2;
+    uint8_t img[npixels];
+    float * fimg = (float*) Image;
+
+    float fmax = FLT_MIN, fmin = FLT_MAX;
+    for(int i = 0; i < npixels; ++i)
+    {
+        fmax = max(fmax, fimg[i]);
+        fmin = min(fmin, fimg[i]);
+    }
+
+    printf("min: %f, max: %f\n", fmin, fmax);
+
+    float mul = 255/(fmax-fmin);
+    for(int i = 0; i < npixels; ++i) img[i] = (uint8_t) ((fimg[i]-fmin)*mul);
+
+    // lodepng_encode_file("dbgout.png", img, DBGOUT_D2, DBGOUT_D1, LCT_GREY, 8);
+    // lodepng_encode_file("dbgout_transposed.png", img, DBGOUT_D1, DBGOUT_D2, LCT_GREY, 8);
+}
+
+kernel(Summation) (in float Summands[TRANSDUCERS][OUT_LINE_LENGTH], out float Sum[OUT_LINE_LENGTH])
+{
+    memcpy(Sum, Summands, OUT_LINE_LENGTH*sizeof(*Sum)); //HACK!
+
+    for (int i=1; i < TRANSDUCERS; i++)
+    {
+        const float * line = Summands[i]; //HACK!
+        for (int j=0; j < OUT_LINE_LENGTH; j++)
+        {
+            Sum[j] += line[j];
+        }
+    }
+}
+
+
+kernel(Unattenuate) (in float CompensationVector[TIMESTEPS], in float DataIn[IN_LINE_LENGTH],
+                     out float DataOut[IN_LINE_LENGTH] buddy(DataIn))
+{
+    for (int i = 0; i < IN_LINE_LENGTH; i++)
+        DataOut[i] = DataIn[i] * CompensationVector[i + N_OFFSET];
+}
+
+
+
+metakernel(beamform) ()
+{
+    //Read in image
+    float SourceImg[TRANSDUCERS][IN_LINE_LENGTH], AttenImg[TRANSDUCERS][IN_LINE_LENGTH], PrepImg[TRANSDUCERS][IN_LINE_LENGTH];
+    GetImage(SourceImg);
+
+    //Prepare image
+    float AttenuationVector[TIMESTEPS];
+    GenerateAtten(AttenuationVector);
+    float Kernel[HPLP_SIZE];
+    GenerateHP(Kernel);
+
+    for(genvar int i = 0; i < TRANSDUCERS; ++i)
+    {
+        Unattenuate(AttenuationVector, SourceImg[i], AttenImg[i]);
+        HP(Kernel, AttenImg[i], PrepImg[i]);
+    }
+
+    // Main beamforming part
+    int MaxElements[TIMESTEPS];
+    float ApodTable[DISTTABLEWIDTH][TIMESTEPS];
+    GenerateApod(MaxElements, ApodTable);
+
+    int DelayVector[DISTTABLEWIDTH][TIMESTEPS];
+    GenerateDelay(MaxElements, DelayVector);
+
+    float ImgExtraction[TRANSDUCERS][TRANSDUCERS][OUT_LINE_LENGTH], ImgApodized[TRANSDUCERS][TRANSDUCERS][OUT_LINE_LENGTH];
+    float ImgBeamformed[TRANSDUCERS][OUT_LINE_LENGTH];
+    for(genvar int i = 0; i < TRANSDUCERS; ++i)
+    {
+        for(genvar int n = 0; n < TRANSDUCERS; ++n)
+        {
+            #define myabs(x) ((x) >= 0 ? (x) : -(x))
+            genvar int dist = myabs(i-n) + TRANSDUCERS-1; //abs(i-n);
+            GetIndex(DelayVector[dist], PrepImg[n], ImgExtraction[i][n]);
+            Apodize(ApodTable[dist], ImgExtraction[i][n], ImgApodized[i][n]);
+        }
+        Summation(ImgApodized[i], ImgBeamformed[i]);
+    }
+
+    //Postprocessing
+    float HilbKernel[HILB_SIZE];
+    float ImgLP[TRANSDUCERS][OUT_LINE_LENGTH], ImgHilbert[TRANSDUCERS][OUT_LINE_LENGTH];
+    uint8_t ImgDisp[TRANSDUCERS][OUT_LINE_LENGTH];
+    GenerateHilbertFilter(HilbKernel);
+    GenerateLP(Kernel);
+    for(genvar int i = 0; i < TRANSDUCERS; ++i)
+    {
+        Hilbert(HilbKernel, ImgBeamformed[i], ImgHilbert[i]);
+        LP(Kernel, ImgHilbert[i], ImgLP[i]);
+        Log(ImgLP[i], ImgDisp[i]);
+    }
+
+    Sink(ImgDisp);
+}
+
+int main()
+{
+    invoke(beamform());
+    return 0;
+}

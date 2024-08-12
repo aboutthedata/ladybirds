@@ -1,0 +1,23 @@
+#ifndef «name»_H
+#define «name»_H
+
+#include <dal.h>
+
+«#inputs»
+#define «macroname» "«name»"
+«/inputs»
+«#outputs»
+#define «macroname» "«name»"
+«/outputs»
+
+#define EVENT_DONE "stop_state1"
+
+
+typedef struct _local_states {
+} «name»_State;
+
+void    «name»_init  (DALProcess* p);
+int     «name»_fire  (DALProcess* p);
+void    «name»_finish(DALProcess* p);
+
+#endif // ndef «name»_H

@@ -1,0 +1,95 @@
+// Copyright ETH Zurich, 2022. This code is under the Apache License v2.0 with LLVM Exceptions. See LICENSE.TXT.
+
+#include <ladybirds.h>
+
+#include <stdlib.h>
+#include <stdio.h>
+#include <stdint.h>
+
+#include "conf.h"
+
+
+enum{
+    cNumMultiplications = Threads,
+
+    cMatrixDimensionN = MatN, // A is an NxM matrix
+    cMatrixDimensionM = MatM, // B is an MxP matrix
+    cMatrixDimensionP = MatP // C is an NxP matrix
+};
+
+typedef long long matrix_element;
+
+
+kernel(GenMatrices)(out matrix_element A[cMatrixDimensionN][cMatrixDimensionM], out matrix_element B[cMatrixDimensionM][cMatrixDimensionP],
+                    out int barrier[2])
+{
+    for (int i = 0; i < cMatrixDimensionN; ++i)
+    {
+        for (int j = 0; j < cMatrixDimensionM; ++j)
+        {
+            A[i][j] = i + j;
+        }
+    }
+
+    for (int i = 0; i < cMatrixDimensionM; ++i)
+    {
+        for (int j = 0; j < cMatrixDimensionP; ++j)
+        {
+            B[i][j] = i + j;
+        }
+    }
+}
+
+kernel(MatrixMultiplication)(in matrix_element A[cMatrixDimensionN][cMatrixDimensionM], in matrix_element B[cMatrixDimensionM][cMatrixDimensionP],
+                             out matrix_element C[cMatrixDimensionN][cMatrixDimensionP], in int barrier[2], out int barrier1[2])
+{
+    for (int i = 0; i < cMatrixDimensionN; ++i)
+    {
+        for (int j = 0; j < cMatrixDimensionP; ++j)
+        {
+            matrix_element res = 0;
+
+            for (int k = 0; k < cMatrixDimensionM; ++k)
+            {
+                res += A[i][k] * B[k][j];
+            }
+
+            C[i][j] = res;
+        }
+    }
+}
+
+kernel(Barrier)(inout int barrier[cNumMultiplications][2])
+{
+}
+
+metakernel(mainkernel)()
+{
+    matrix_element A[cNumMultiplications][cMatrixDimensionN][cMatrixDimensionM];
+    matrix_element B[cNumMultiplications][cMatrixDimensionM][cMatrixDimensionP];
+
+    int barrier[cNumMultiplications][2], barrier1[cNumMultiplications][2];
+    
+    for (genvar int i = 0; i < cNumMultiplications; ++i)
+    {
+        GenMatrices(A[i], B[i], barrier[i]);
+    }
+
+    matrix_element C[cNumMultiplications][cMatrixDimensionN][cMatrixDimensionP];
+
+    Barrier(barrier);
+    
+    for (genvar int i = 0; i < cNumMultiplications; ++i)
+    {
+        MatrixMultiplication(A[i], B[i], C[i], barrier[i], barrier1[i]);
+    }
+    
+    Barrier(barrier1);
+}
+
+int main()
+{
+    invoke(mainkernel());
+
+    return 0;
+}

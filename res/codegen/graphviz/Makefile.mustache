@@ -1,0 +1,17 @@
+DOT=dot
+
+DOTFILES=«#dotfiles»«.» «/dotfiles»
+
+SVGFILES=$(DOTFILES:.dot=.svg)
+PDFFILES=$(DOTFILES:.dot=.pdf)
+
+svg: $(SVGFILES)
+%.svg: %.dot
+	$(DOT) $< -Tsvg -o $@
+
+pdf: $(PDFFILES)
+%.pdf: %.dot
+	$(DOT) $< -Tpdf -o $@
+
+clean:
+	rm -f $(SVGFILES) $(PDFFILES)

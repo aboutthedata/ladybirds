@@ -1,0 +1,27 @@
+#ifndef AUTOMATIC_GEN_H
+#define AUTOMATIC_GEN_H
+
+#include "SharedStruct.h"
+
+
+extern volatile uint8_t mapping_vector_local[«vecsize»];
+
+//counter for the execution rounds
+extern volatile int roundCounter;
+
+//one period of a whole execusion
+extern int period_in_seconds;
+
+//which tasks are ready to be processed
+extern volatile uint8_t arrival_vector_local[«vecsize»];
+
+//counter, which tasks have been processed
+extern volatile uint8_t execution_vector_local[«vecsize»];
+
+extern volatile struct struct_shared_variables shared_struct;
+
+void initialize_StructAndVariables();
+
+
+#endif
+

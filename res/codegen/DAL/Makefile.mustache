@@ -1,0 +1,19 @@
+{{=« »=}}
+CC=gcc
+LD=gcc
+
+CFLAGS=-g -O0 -std=c11 -Wall
+LDFLAGS=-lm -g
+
+OFILES=«#ofiles»«.» «/ofiles» main.o
+
+all: «appname»
+
+«appname»: $(OFILES)
+	$(LD) $(LDFLAGS) $^ -o $@
+
+%.o: %.c global.h «constantsh»
+	$(CC) $(CFLAGS) -c $< -o $@
+
+clean:
+	rm -f «appname» $(OFILES)

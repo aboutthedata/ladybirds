@@ -1,0 +1,17 @@
+#include <stdio.h>
+#include <inttypes.h>
+
+#include "global.h"
+
+«#buffers»«^isexternal»static uint8_t «name»[«size»];
+«/isexternal»«/buffers»
+
+int _lb_invoke_«maintask.kernel.func»(«#maintask.kernel.packets»«paramstring»«:», «/:»«/maintask.kernel.packets»)
+{
+    «#tasks»
+    «kernel.func»(«#parameters»«.», «/parameters»
+        «#ifaces»«callparam», «buffer.name»+«offset»«:», 
+        «/:»«/ifaces»);«!
+    »«/tasks»
+    return 0;
+}

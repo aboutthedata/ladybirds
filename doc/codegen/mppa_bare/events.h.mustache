@@ -1,0 +1,20 @@
+#ifndef EVENTS_H_
+#define EVENTS_H_
+
+typedef int EventObserver;
+typedef struct 
+{
+    volatile EventObserver Counter;
+} Event;
+
+void EventInit(Event * pEvent);
+void EventDestroy(Event * pEvent);
+
+//EventObserver StartObservation(Event * pEvent);
+#define StartObservation(event) ((event)->Counter);
+void WaitForEvent(Event * pEvent, EventObserver * pObserver);
+
+void RaiseEvent(Event * pEvent);
+
+
+#endif //EVENTS_H_

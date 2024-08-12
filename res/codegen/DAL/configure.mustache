@@ -1,0 +1,6 @@
+sed 's/RTLD_LAZY/RTLD_LAZY | RTLD_GLOBAL/' -i util/controllerHelperGeneric.cpp
+sed 's/^COMP_ARG\W*=\W*$/COMP_ARG = -std=c++11 -DLENGTH=20/' -i Makefile.inc
+
+«#auxfiles»
+ln -f app/APP1/«.» . #no symbolic links, for ant cannot deal with them
+«/auxfiles»

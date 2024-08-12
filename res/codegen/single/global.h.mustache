@@ -1,0 +1,21 @@
+#ifndef GLOBAL_H
+#define GLOBAL_H
+
+#include <inttypes.h>
+
+///// Definitions //////////////////////////////////////////////////////////////////////////////////////////////////////«!
+»«#definitions»
+#define «id» «definition»
+«/definitions»
+
+///// Type checks //////////////////////////////////////////////////////////////////////////////////////////////////////«!
+»«#typeckecks»
+_Static_assert(sizeof(«key») == «value», "The size of type «key» was assumed to be «value», but is not.");«!
+»«/typeckecks»
+
+///// Kernel declarations //////////////////////////////////////////////////////////////////////////////////////////////«!
+»«#kernels»
+int «func»(«#parameters»const «basetype» «name», «/parameters»«#packets»«paramstring»«:», «/:»«/packets»);«!
+»«/kernels»
+
+#endif //ndef GLOBAL_H

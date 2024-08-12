@@ -1,0 +1,24 @@
+#include "Functionpointers_M0.h"
+#include "SharedStruct.h"
+
+extern struct struct_shared_variables* shared_struct_ptr;
+
+«#g.operations»
+void function_«task.task_index_global»()
+{
+    «task.kernel.func»(«#task.parameters»«.», «/task.parameters»«#task.ifaces»
+        «callparam», (shared_struct_ptr->buffer_vector[«buffer.index_in_array»]+«offset»)«:», 
+            «/:»«/task.ifaces»);
+}
+
+«/g.operations»
+
+
+
+void (*functionPointers[«taskcount»])() =
+{
+«#f_ptr»
+  «function_pointer»«:», 
+«/:»
+«/f_ptr» 
+};

@@ -1,0 +1,38 @@
+digraph "«name»"
+{
+    label="«name»";
+    rankdir="LR";
+    nodesep=1.5;
+    ranksep=1.5;
+    fontname="Linux Biolinum";
+    edge[labeldistance=2.5 fontcolor="red" fontname="Linux Biolinum" URL="#"];
+    node[shape=none width=0 height=0 margin=0 fontname="Linux Biolinum"];    
+
+    
+    «#tasks»
+    "«name»" [label=<
+        <table style="rounded" width="100" cellspacing="15">
+            <tr><td  border="0">«name»</td></tr><hr/><tr><td border="0"></td></tr>«!
+        »«#twocol»
+            <tr>«#ports»«#valid»<td port="«name»">«name»</td>«/valid»«^valid»<td border="0"></td>«/valid»«/ports»</tr>«!
+        »«/twocol»«!
+        »«#onecol»
+            <tr><td colspan="2" port="«name»">«name»</td></tr>«!
+        »«/onecol»
+        </table>>];
+    «/tasks»
+    
+    «#arguments»
+    "«name»" [label=<
+        <table cellspacing="15">«!
+            »«#packets»
+            <tr><td port="«name»">«name»</td></tr>«/packets»
+        </table>>];
+    «/arguments»
+    
+    «#dependencies»
+    "«from.task.name»":«from.packet» -> "«to.task.name»":«to.packet» «!
+        »[taillabel="«from.indexstring»" headlabel="«to.indexstring»" «!
+        »tooltip="«from.indexstring»  -->  «to.indexstring»"];«!
+    »«/dependencies»
+}

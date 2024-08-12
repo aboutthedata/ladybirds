@@ -1,0 +1,66 @@
+#include "global.h"
+#include "events.h"
+#include "taskmanagement.h"
+
+«#operations»
+static void Task«id»()
+{
+    «task.kernel.func»(«#task.parameters»«.», «/task.parameters»
+                       «#task.ifaces»«callparam», «buffer.name»+«offset»«:», 
+                       «/:»«/task.ifaces»);
+}
+«/operations»
+
+static int DepFieldIndices[] = 
+{
+«#operations»    «depfieldindices» // task «id»
+«/operations»};
+    
+static TaskBitfieldUnit DepFieldData[] = 
+{
+«#operations»    «depfielddata» // task «id»
+«/operations»};
+
+
+static TaskInfo Tasks[] = 
+{
+«#operations»    {&Task«id», «task.bitfieldhex», «task.bitfieldindex», «checkstart», «checkend», 0},
+«/operations»};
+
+static GroupInfo ThisGroup = { DepFieldIndices, DepFieldData, Tasks, sizeof(Tasks)/sizeof(*Tasks), 0 };
+
+void* «name»(void* param)
+{
+    ThisGroup.FirstCandidate = 0;
+    for(int i = 0; i < sizeof(Tasks)/sizeof(*Tasks); ++i)
+    {
+        Tasks[i].Finished = 0;
+    }
+    
+    int alldone;
+    do
+    {
+        //get next task to execute...
+        EventObserver obs = StartObservation(&TasksFinishedEvent);
+        int nexttask = GetNextTask(&ThisGroup, TasksFinished);
+        
+        //...maybe waiting until we have one
+        while(nexttask < 0)
+        {
+            WaitForEvent(&TasksFinishedEvent, &obs);
+            nexttask = GetNextTask(&ThisGroup, TasksFinished);
+        }
+        
+«!      printf("«name», run  %d\n", nexttask);
+»        //execute it
+        (*Tasks[nexttask].Function)();
+        
+        //Broadcast that the task is finished
+        alldone = TaskFinished(nexttask, &ThisGroup, TasksFinished);
+«!      printf("«name», done %d\n", nexttask);
+»        RaiseEvent(&TasksFinishedEvent);
+    }
+    while(!alldone);
+    
+    return 0;
+}

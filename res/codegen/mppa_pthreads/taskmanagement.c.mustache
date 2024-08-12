@@ -1,0 +1,59 @@
+#include "taskmanagement.h"
+
+/** Returns 1 if \p ptask is ready to be executed (all tasks it depends on have finished).
+ *  In order to avoid multiple checks of conditions that are already fulfilled, this function updates the index of the
+ *  first dependencies to check, such that next time the same check that failed before is directly performed.**/
+static inline int TryTask(TaskInfo * ptask,
+                          const int* depindices, const TaskBitfieldUnit * depfield, 
+                          const volatile TaskBitfieldUnit* finished)
+{
+    int start = ptask->CheckStart, end = ptask->CheckEnd;
+    if(start < 0) return 0; //Task has already finished
+    
+    int diffidx;
+    for(diffidx = start; diffidx < end; ++diffidx)
+    {
+        TaskBitfieldUnit required = depfield[diffidx];
+        TaskBitfieldUnit fulfilled = finished[depindices[diffidx]];
+        if((fulfilled & required) != required)
+        { //found unmet dependency, task cannot start
+            if(diffidx > start) ptask->CheckStart = diffidx; //Update the conditions to check
+            return 0;
+        }
+    }
+    return 1; //No unmet dependencies, task can start
+}
+
+int GetNextTask(/*inout*/GroupInfo * pgroup, const volatile TaskBitfieldUnit* finished)
+{
+    int * depindices = pgroup->DepFieldIndices;
+    TaskBitfieldUnit * depfield = pgroup->DepFieldData;
+    
+    for(int task = pgroup->FirstCandidate, taskend = pgroup->TaskCount; task < taskend; ++task)
+    {
+        if(TryTask(&pgroup->Tasks[task], depindices, depfield, finished)) return task;
+    }
+    return -1;
+}
+
+
+int TaskFinished(int task, /*inout*/GroupInfo * pgroup, /*inout*/ volatile TaskBitfieldUnit* finished)
+{
+    TaskInfo * ptask = &pgroup->Tasks[task];
+    finished[ptask->IdFieldIndex] |= ptask->IdBitfield;
+    
+    if(task == pgroup->FirstCandidate)
+    {
+        int ntasks = pgroup->TaskCount;
+        while(++task < ntasks && pgroup->Tasks[task].CheckStart < 0);
+        
+        pgroup->FirstCandidate = task;
+        if(task == ntasks) return 1;
+    }
+    else
+    {
+        pgroup->Tasks[task].CheckStart = -1; //Mark the task as finished, so that it doesn't run again
+    }
+    return 0;
+}
+

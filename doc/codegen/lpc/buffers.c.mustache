@@ -1,0 +1,14 @@
+#include "buffers.h"
+
+«#t1»
+volatile uint8_t «name»[«size»] = {0};
+«/t1»
+
+
+//buffer vector
+volatile uint8_t* buffer_array_local[«trollycount»] = {
+«#t2»
+«name»«:», 
+«/:»
+«/t2»
+};

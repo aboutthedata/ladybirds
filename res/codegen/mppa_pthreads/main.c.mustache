@@ -1,0 +1,74 @@
+#define _GNU_SOURCE
+#include <pthread.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <errno.h>
+
+#include <mppa.h>
+#include <mppa/osconfig.h>
+
+#include "global.h"
+#include "events.h"
+#include "taskmanagement.h"
+
+#define extern
+#include "buffers.h"
+#undef extern
+
+
+Event TasksFinishedEvent;
+volatile TaskBitfieldUnit TasksFinished[«TaskBitfieldLength»];
+
+«#groups»
+void *«name»(void *);
+«/groups»
+static struct {
+    void *(*Function)(void *);
+    int Core;
+} Threads[] = {«#groups»
+    {&«name», «targetcore»},«/groups»
+};
+
+int _lb_invoke_«maintask.kernel.func»()
+{
+    printf("Test program is running!\n");
+    
+    EventInit(&TasksFinishedEvent);
+    for(int i = 0; i < sizeof(TasksFinished)/sizeof(*TasksFinished); ++i)
+        TasksFinished[i] = 0;
+    
+    // Initializing and starting threads
+    pthread_t threads[«threadcount»];
+    
+    for (int i = 0; i < «threadcount»; i++)
+    {
+        pthread_attr_t attr;
+        if ((errno = pthread_attr_init(&attr)) != 0)
+        {
+            perror("Unable to initialize thread attributes");
+            return 1;
+        }
+        
+        cpu_set_t cpuset = 1 << Threads[i].Core;
+        if ((errno = pthread_attr_setaffinity_np(&attr, sizeof(cpuset), &cpuset)) != 0)
+        {
+            perror("Unable to set thread affinity");
+            return 1;
+        }
+        
+        if ((errno = pthread_create(&threads[i], &attr, Threads[i].Function, 0)) != 0)
+        {
+            perror("Unable to create thread");
+            return 1;
+        }
+    }
+    
+    // Waiting for threads to finish
+    for (int i = 0; i < «threadcount»; i++)
+        pthread_join(threads[i], 0);
+    
+    EventDestroy(&TasksFinishedEvent);
+    
+    return 0;
+}
+

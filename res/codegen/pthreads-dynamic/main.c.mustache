@@ -1,0 +1,61 @@
+#define _GNU_SOURCE
+#include <pthread.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <errno.h>
+
+#include "global.h"
+#include "events.h"
+#include "taskmanagement.h"
+
+#define extern
+#include "buffers.h"
+#undef extern
+
+Event TasksFinishedEvent;
+volatile TaskBitfieldUnit TasksFinished[«TaskBitfieldLength»];
+BufferInfo ExternalBuffers[«ExternalBufferCount»];
+
+«#groups»void* «name»(void*);
+«/groups»
+
+static struct {void*(*Function)(void*); int Core; } Threads[] = 
+{«#groups»
+    {&«name», «targetcore»},«/groups»
+};
+
+int _lb_invoke_«maintask.kernel.func»(«#maintask.kernel.packets»«paramstring»«:», «/:»«/maintask.kernel.packets»)
+{
+    «#MainEntryArguments»
+    ExternalBuffers[«index»] = (BufferInfo){_lb_size_«argname», (void*) _lb_base_«argname»};«/MainEntryArguments»
+    
+    EventInit(&TasksFinishedEvent);
+    for(int i = 0; i < sizeof(TasksFinished)/sizeof(*TasksFinished); ++i)
+        TasksFinished[i] = 0;
+    
+    pthread_t threads[«threadcount»];
+    cpu_set_t cpuset;
+    
+    for(int i = 0; i < «threadcount»; i++)
+    {
+        if((errno = pthread_create(&threads[i], 0, Threads[i].Function, 0)) != 0)
+        {
+            perror("Unable to create thread");
+            return 1;
+        }
+        
+        CPU_ZERO(&cpuset);
+        CPU_SET(Threads[i].Core, &cpuset);
+        if((errno = pthread_setaffinity_np(threads[i], sizeof(cpuset), &cpuset)) != 0)
+        {
+            perror("Unable to set thread affinity");
+            return 1;
+        }
+    }
+    
+    for(int i = 0; i < «threadcount»; i++) pthread_join(threads[i], 0);
+
+    EventDestroy(&TasksFinishedEvent);
+    return 0;
+}
+

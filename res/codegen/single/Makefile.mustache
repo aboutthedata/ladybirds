@@ -1,0 +1,21 @@
+CC=gcc
+LD=gcc
+
+CFLAGS=-g -O0 -std=gnu11 -Wall
+LDFLAGS=-lm -g
+
+OFILES=«#ofiles»«.» «/ofiles»main.o
+
+
+CFLAGS += -Ilb-includes
+
+all: «appname»
+
+«appname»: $(OFILES)
+	$(LD) $(LDFLAGS) $^ -o $@
+
+%.o: %.c global.h
+	$(CC) $(CFLAGS) -c $< -o $@
+
+clean:
+	rm -f «appname» $(OFILES)

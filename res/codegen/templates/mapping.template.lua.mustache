@@ -1,0 +1,20 @@
+local nclusters, ngroupspercluster = 1, 1
+
+local ngroups = nclusters * ngroupspercluster
+local groupctr = -1
+local nextgroup = function()
+   groupctr = (groupctr+1) % ngroups
+   return groupctr
+end
+
+grouping = {
+«#tasks»   ['«name»'] = nextgroup(),
+«/tasks»}
+
+
+divisions = {}
+for i = 0,ngroups-1,ngroupspercluster do
+    local t = {}
+    for n = i,i+ngroupspercluster-1 do t[#t+1] = n; end
+    divisions[#divisions+1] = t
+end

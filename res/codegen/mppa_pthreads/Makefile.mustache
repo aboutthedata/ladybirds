@@ -1,0 +1,25 @@
+SHELL=/bin/bash
+
+CC=k1-nodeos-gcc
+LD=k1-nodeos-gcc
+SIM=k1-cluster
+
+CFLAGS=-O0 -g3 -std=c11 -Wall -Ilb-includes
+LDFLAGS=
+
+OFILES=«#ofiles»«.» «/ofiles»$(shell echo _Thread{1..«threadcount»}.o)
+
+
+all: «appname»
+
+«appname»: $(OFILES)
+	$(LD) $(LDFLAGS) $^ -o $@
+
+%.o: %.c global.h
+	$(CC) $(CFLAGS) -c $< -o $@
+
+sim: all
+	$(SIM) -- «appname»
+
+clean:
+	rm -f «appname» $(OFILES)

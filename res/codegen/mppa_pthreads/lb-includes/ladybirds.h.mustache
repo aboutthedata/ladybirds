@@ -1,0 +1,19 @@
+#ifndef LADYBIRDS_H_
+#define LADYBIRDS_H_
+
+#define kernel(x) void x
+#define metakernel(x) void x
+#define buddy(buddypacket)
+#define invoke(x) (_lb_invoke_##x)
+#define invokeseq(x) (x)
+#define genvar
+
+#if defined(__GNUC__) && !defined(__clang__)
+#define _LB_HIDDEN(x) 0
+#else
+#define _LB_HIDDEN(x) x
+#endif
+
+int _lb_invoke_«maintask.kernel.func»();
+
+#endif //LADYBIRDS_H_

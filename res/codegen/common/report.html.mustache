@@ -1,0 +1,19 @@
+<html>
+<head><title>Code generation report for project «appname»</title></head>
+<body>
+    <h1>Code generation report for project «appname»</h1>
+    
+    <h2>Groups</h2>
+«#groups»
+        <h3>«name»</h3>
+        <dl>
+            <dt>Target core:</dt><dd>«targetcore»</dd>
+            <dt>Tasks:</dt>
+            <dd><ul>«#operations»
+                <li> «task.name»</li>«/operations»
+            </ul></dd>
+        </dl>
+
+«/groups»
+</body>
+</html>

@@ -1,0 +1,10 @@
+#include "dependency_structure.h"
+
+//first number in array: number of dependencies; following entries: dependencies of this task
+«#struct»
+short dep_«index»[«counter»+1] = {«counter»«^no_dependencies», «/no_dependencies»«#tasks»«from_task»«:», «/:»«/tasks»};
+«/struct»
+
+short* dependency_structure[«taskcount»] = {«#struct2»dep_«index»«:», «/:»«/struct2»};
+
+

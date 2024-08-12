@@ -1,0 +1,171 @@
+// Copyright ETH Zurich, 2022. This code is under the Apache License v2.0 with LLVM Exceptions. See LICENSE.TXT.
+
+#include <ladybirds.h>
+
+#include <stdlib.h>
+#include <stdio.h>
+#include <string.h>
+
+#include "conf.h"
+
+enum{
+    cImageWidth = cx,
+    cImageHeight = cy,
+
+    cEdgeWidth = (cImageWidth-2),
+    cEdgeHeight = (cImageHeight-2),
+
+    cnBlocksX = xblocks,
+    cnBlocksY = yblocks,
+
+    cBlockWidth = (cEdgeWidth / cnBlocksX),
+    cBlockHeight = (cEdgeHeight / cnBlocksY)
+};
+
+_Static_assert(cEdgeWidth % cnBlocksX == 0, "Cannot divide image width by number of blocks!");
+_Static_assert(cEdgeHeight % cnBlocksY == 0, "Cannot divide image height by number of blocks!");
+
+
+kernel(SobelX)(in unsigned char Image[cBlockHeight][cBlockWidth], out char GradientX[cBlockHeight][cBlockWidth])
+{
+    for (int y = 0; y < cBlockHeight; ++y)
+    {
+        for (int x = 0; x < cBlockWidth; ++x)
+        {
+            GradientX[y][x] =   Image[y][x]   -   Image[y][x+2]
+                            + 2*Image[y+1][x] - 2*Image[y+1][x+2]
+                            +   Image[y+2][x] -   Image[y+2][x+2];
+        }
+    }
+}
+
+kernel(SobelY)(in unsigned char Image[cBlockHeight][cBlockWidth], out char GradientY[cBlockHeight][cBlockWidth])
+{   for (int y = 0; y < cBlockHeight; ++y)
+    {
+        for (int x = 0; x < cBlockWidth; ++x)
+        {
+            GradientY[y][x] =   Image[y][x]   -   Image[y+2][x]
+                            + 2*Image[y][x+1] - 2*Image[y+2][x+1]
+                            +   Image[y][x+2] -   Image[y+2][x+2];
+        }
+    }
+}
+
+kernel(EdgeGradient)(in char GradientX[cBlockHeight][cBlockWidth], in char GradientY[cBlockHeight][cBlockWidth],
+                     out unsigned char Gradient[cBlockHeight][cBlockWidth], out unsigned char Direction[cBlockHeight][cBlockWidth])
+{
+    for (int y = 0; y < cBlockHeight; ++y)
+    {
+        for (int x = 0; x < cBlockWidth; ++x)
+        {
+            char xGrad = GradientX[y][x], yGrad = GradientY[y][x];
+            unsigned char xAbs = (xGrad >= 0 ? xGrad : -xGrad), yAbs = (yGrad >= 0 ? yGrad : -yGrad);
+            Gradient[y][x] = xAbs + yAbs;
+
+            if ((xGrad ^ yGrad) >= 0)
+            {
+                if (xAbs >= yAbs)
+                    Direction[y][x] = yAbs > ((xAbs * 106) >> 8) ? 1 : 2;
+                else
+                    Direction[y][x] = xAbs > ((yAbs * 106) >> 8) ? 1 : 0;
+            }
+            else
+            {
+                if (xAbs >= yAbs)
+                    Direction[y][x] = yAbs > ((xAbs * 106) >> 8) ? 3 : 2;
+                else
+                    Direction[y][x] = xAbs > ((yAbs * 106) >> 8) ? 3 : 0;
+            }
+        }
+    }
+}
+
+kernel(NonMaxSuppression)(inout unsigned char Gradient[cBlockHeight][cBlockWidth], in unsigned char Direction[cBlockHeight][cBlockWidth])
+{
+    for (int y = 1; y < cBlockHeight-1; ++y)
+    {
+        for (int x = 1; x < cBlockWidth-1; ++x)
+        {
+            unsigned char dir = Direction[y][x];
+
+            int rowdir[] = {-1, -1, 0, -1}, coldir[] = {0, +1, -1, -1};
+
+            if (Gradient[y+rowdir[dir]][x+coldir[dir]] > Gradient[y][x] ||
+                Gradient[y-rowdir[dir]][x-coldir[dir]] > Gradient[y][x])
+            {
+                Gradient[y][x] = 0;
+            }
+        }
+    }
+}
+
+/*kernel(Norm)(in char GradX[cEdgeHeight][cEdgeWidth], in char GradY[cEdgeHeight][cEdgeWidth],
+             out unsigned char Result[cEdgeHeight][cEdgeWidth] buddy(GradX) buddy(GradY))
+{
+    for (int y = 0; y < cEdgeHeight; ++y)
+    {
+        for (int x = 0; x < cEdgeWidth; ++x)
+        {
+            char xGrad = GradX[y][x], yGrad = GradY[y][x];
+            unsigned char xAbs = (xGrad >= 0 ? xGrad : -xGrad), yAbs = (yGrad >= 0 ? yGrad : -yGrad);
+            Result[y][x] = xAbs + yAbs;
+        }
+    }
+}*/
+
+metakernel(Canny)(in unsigned char Image[cImageHeight][cImageWidth], out unsigned char Edges[cEdgeHeight][cEdgeWidth])
+{
+    char GradientX[cEdgeHeight][cEdgeWidth];
+    char GradientY[cEdgeHeight][cEdgeWidth];
+
+    unsigned char Direction[cEdgeHeight][cEdgeWidth];
+
+    for (genvar int x1 = 0; x1 < cEdgeWidth; x1 += cBlockWidth)
+    {
+        for (genvar int y1 = 0; y1 < cEdgeHeight; y1 += cBlockHeight)
+        {
+            genvar int x2 = x1+cBlockWidth-1, y2 = y1+cBlockHeight-1;
+
+            SobelX(Image[y1,y2][x1,x2], GradientX[y1,y2][x1,x2]);
+            SobelY(Image[y1,y2][x1,x2], GradientY[y1,y2][x1,x2]);
+
+            EdgeGradient(GradientX[y1,y2][x1,x2], GradientY[y1,y2][x1,x2], Edges[y1,y2][x1,x2], Direction[y1,y2][x1,x2]);
+
+            NonMaxSuppression(Edges[y1,y2][x1,x2], Direction[y1,y2][x1,x2]);
+        }
+    }
+
+//    Norm(GradientX, GradientY, Edges);
+}
+
+kernel(GenImage)(out unsigned char Image[cImageHeight][cImageWidth])
+{
+    for (int y = 0; y < cImageHeight; ++y)
+    {
+        for (int x = 0; x < cImageWidth; ++x)
+        {
+            Image[y][x] = (y * x) % 256;
+        }
+    }
+}
+
+kernel(OutputImage)(in unsigned char Edges[cEdgeHeight][cEdgeWidth])
+{
+}
+
+metakernel(mainkernel)()
+{
+    unsigned char Image[cImageHeight][cImageWidth];
+    unsigned char Edges[cEdgeHeight][cEdgeWidth];
+
+    GenImage(Image);
+    Canny(Image, Edges);
+    OutputImage(Edges);
+}
+
+int main()
+{
+    invoke(mainkernel());
+
+    return 0;
+}

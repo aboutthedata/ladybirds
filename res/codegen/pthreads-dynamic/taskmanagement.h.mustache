@@ -1,0 +1,54 @@
+#ifndef TASKMANAGEMENT_H_
+#define TASKMANAGEMENT_H_
+
+#include <inttypes.h>
+#include "global.h"
+
+typedef uint«TaskBitfieldUnitSize»_t TaskBitfieldUnit;
+static_assert(sizeof(TaskBitfieldUnit) == «TaskBitfieldUnitSize»/8, 
+    "The size of type uint«TaskBitfieldUnitSize»_t was assumed to be «TaskBitfieldUnitSize» bits, but is not.");
+
+#define TASK_BIT(n) ( TaskBitfieldUnit(1) << n)
+
+typedef struct
+{
+    void (*Function)();
+    
+    TaskBitfieldUnit IdBitfield;
+    int IdFieldIndex;
+    
+    int CheckStart;
+    int CheckEnd;
+    
+    int Finished;
+} TaskInfo;
+
+typedef struct
+{
+    int * DepFieldIndices;
+    TaskBitfieldUnit * DepFieldData;
+
+    TaskInfo * Tasks;
+    int TaskCount;
+    
+    int FirstCandidate;
+} GroupInfo;
+
+typedef struct
+{
+    const int * Dimensions;
+    void * Base;
+} BufferInfo;
+
+extern volatile TaskBitfieldUnit TasksFinished[];
+extern BufferInfo ExternalBuffers[];
+
+//! Returns the index of the next task in the group that is ready or -1 if no task is ready.
+int GetNextTask(/*inout*/GroupInfo * pgroup, const volatile TaskBitfieldUnit* finished);
+//! Marks the given task as finished in the group info and the finished bitfield. Returns 1 if there are no tasks left.
+int TaskFinished(int task, /*inout*/GroupInfo * pgroup, /*inout*/ volatile TaskBitfieldUnit* finished);
+
+
+
+
+#endif//TASKMANAGEMENT_H_

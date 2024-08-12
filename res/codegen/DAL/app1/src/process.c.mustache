@@ -1,0 +1,40 @@
+#include "«name».h"
+#include <dal.h>
+
+#include "global.h"
+#include "experiment.h"
+
+
+void «name»_init(DALProcess* p)
+{
+}
+
+int «name»_fire(DALProcess* p)
+{
+    gExperimentProcessHandle = p;
+    void * dummy = 0;
+    
+    «#operations»
+    «#inputs»
+    DAL_read ((void*)«macroname», &dummy, sizeof(dummy), p);
+    «/inputs»
+    «task.kernel.func»(«#task.ifaces»
+        («packet.caststring») («buffer.name»+«offset»)«^packet.last», 
+            «/packet.last»«/task.ifaces»);
+    «#outputs»
+    DAL_write((void*)«macroname», &dummy, sizeof(dummy), p);
+    «/outputs»
+    //
+    «/operations»
+    
+    return 1;
+}
+
+void «name»_finish(DALProcess* p)
+{
+}
+
+«#buffershere»
+#define extern
+#include "buffers.h"
+«/buffershere»

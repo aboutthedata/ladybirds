@@ -1,0 +1,2 @@
+auxfiles = { "conf.h" }
+

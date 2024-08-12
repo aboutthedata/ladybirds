@@ -1,0 +1,24 @@
+#include "Functionpointers_M4.h"
+#include "AutomaticGeneratedVariables.h"
+#include "SharedStruct.h"
+#include "ladybird_kernels.h"
+
+«#g.operations»
+void function_«task.task_index_global»()
+{
+    «task.kernel.func»(«#task.parameters»«.», «/task.parameters»«#task.ifaces»
+        «callparam», (shared_struct.buffer_vector[«buffer.index_in_array»]+«offset»)«:», 
+            «/:»«/task.ifaces»);
+}
+
+«/g.operations»
+
+
+
+void (*functionPointers[«taskcount»])() =
+{
+«#f_ptr»
+  «function_pointer»«:», 
+«/:»
+«/f_ptr» 
+};

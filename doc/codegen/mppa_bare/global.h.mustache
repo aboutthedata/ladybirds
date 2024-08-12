@@ -1,0 +1,49 @@
+#ifndef GLOBAL_H
+#define GLOBAL_H
+
+#include <inttypes.h>
+#include <mppa.h>
+
+//#include "events.h"
+#include "buffers.h"
+
+
+#if (!defined __cplusplus) || (__cplusplus < 201100L)
+#  undef static_assert
+#  if __STDC_VERSION__ > 201100L
+#    define static_assert _Static_assert
+#  else
+#    define _codegen__my___concat(a,b) a##b
+#    define _codegen__my___label(x) _codegen__my___concat(assertion_, x)
+#    define static_assert(expr, msg) struct _codegen__my___label(__LINE__){ int test:(expr); };
+#  endif
+#endif
+
+#define assert(x) if(!(x)) __asm__ __volatile__ ("break 1;;")
+
+///// Definitions //////////////////////////////////////////////////////////////////////////////////////////////////////
+«#definitions»#define «id» «definition»
+«/definitions»
+
+#define EVENT_START_THREAD 1
+#define EVENT_END_THREAD   2
+
+#define PE_STACK_SIZE 0x400 // 1KB
+
+///// Type checks //////////////////////////////////////////////////////////////////////////////////////////////////////
+«#typeckecks»static_assert(sizeof(«key») == «value», "The size of type «key» was assumed to be «value», but is not.");
+«/typeckecks»
+
+///// Shared Variables /////////////////////////////////////////////////////////////////////////////////////////////////
+//extern Event TasksFinishedEvent;
+
+«#groups»extern unsigned int Thread«number»StartCycles[«numoperations»];
+extern unsigned int Thread«number»StopCycles[«numoperations»];
+«/groups»
+
+///// Kernel declarations //////////////////////////////////////////////////////////////////////////////////////////////
+«#kernels»int «func»(«#parameters»const «basetype» «name», «/parameters»«#packets»«paramstring»«:», «/:»«/packets»);
+«/kernels»
+
+
+#endif //ndef GLOBAL_H

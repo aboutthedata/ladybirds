@@ -1,0 +1,34 @@
+#include "events.h"
+
+void EventInit(Event * pEvent)
+{
+    pthread_mutex_init(&pEvent->Mutex, NULL);
+    pthread_cond_init(&pEvent->Cond, NULL);
+    pEvent->Counter = 0;
+}
+
+void EventDestroy(Event * pEvent)
+{
+    pthread_cond_destroy(&pEvent->Cond);
+    pthread_mutex_destroy(&pEvent->Mutex);
+}
+
+void WaitForEvent(Event * pEvent, EventObserver * pObserver)
+{
+    if(*pObserver == pEvent->Counter)
+    {
+        pthread_mutex_lock(&pEvent->Mutex);
+        while(*pObserver == pEvent->Counter) pthread_cond_wait(&pEvent->Cond, &pEvent->Mutex);
+        pthread_mutex_unlock(&pEvent->Mutex);
+    }    
+    *pObserver = pEvent->Counter;
+}
+
+void RaiseEvent(Event * pEvent)
+{
+    pthread_mutex_lock(&pEvent->Mutex);
+    pEvent->Counter++;
+    pthread_cond_broadcast(&pEvent->Cond);
+    pthread_mutex_unlock(&pEvent->Mutex);
+}
+

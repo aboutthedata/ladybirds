@@ -1,0 +1,79 @@
+#include "AutomaticGeneratedVariables.h"
+#include "SharedStruct.h"
+#include "buffers.h"
+
+
+//mapping of the tasks: 4 --> M4 has to do it, 0--> m0 has to do it
+volatile uint8_t mapping_vector_local[«vecsize»];
+
+//which tasks are ready to be processed
+volatile uint8_t arrival_vector_local[«vecsize»];
+
+//counter, which tasks have been processed
+volatile uint8_t execution_vector_local[«vecsize»];
+
+//counter for the execution rounds
+volatile int roundCounter;
+
+//one period of a whole execusion
+int period_in_seconds;
+
+//initialize empty struct (safety reasons)
+volatile struct struct_shared_variables shared_struct = {
+	.mapping_vector = NULL,
+	.arrival_vector =  NULL,
+	.execution_vector = NULL,
+	.buffer_vector = NULL,
+
+	.numberOfTasksinTotal = 0,
+
+	//for initialization phase
+	.m4_ready = 0,
+	.m0_ready = 0,
+
+	//for counting tasks
+	.m4_assigned_taskcounter = 0,
+	.m0_assigned_taskcounter = 0
+};
+
+//was necessary because otherwise nondeterministic behavior of platform; initialization did not work correctly
+void initialize_StructAndVariables(){
+
+	int numberOfTasksInTotal_temp = «taskcount»;
+	int numberOfPackets = «vecsize»;
+	period_in_seconds = 2;
+
+	uint8_t mapping_vector_local_temp[] = {«#vectorByte»«number»«:», «/:»«/vectorByte»};
+
+	int i;
+	int k;
+
+	for(i=0; i<numberOfPackets; i++)
+	{
+		mapping_vector_local[i] = mapping_vector_local_temp[i];
+		arrival_vector_local[i] = 0;
+		execution_vector_local[i] = 0;
+	}
+
+
+
+	roundCounter=0;
+
+	shared_struct.mapping_vector = mapping_vector_local;
+	shared_struct.arrival_vector =  arrival_vector_local;
+	shared_struct.execution_vector = execution_vector_local;
+
+	shared_struct.numberOfTasksinTotal = numberOfTasksInTotal_temp;
+
+	//for initialization phase
+	shared_struct.m4_ready = 0;
+	shared_struct.m0_ready = 0;
+
+	//for counting tasks
+	shared_struct.m4_assigned_taskcounter = 0;
+	shared_struct.m0_assigned_taskcounter = 0;
+
+	shared_struct.buffer_vector = buffer_array_local;
+}
+
+

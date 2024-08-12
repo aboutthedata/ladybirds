@@ -1,0 +1,8 @@
+SECTIONS
+{
+  .data :
+  {
+      . = ALIGN(8);«#buffers»
+      «name» = .; . += ALIGN(«size», 8);«/buffers»
+  } > internal_mem
+}
